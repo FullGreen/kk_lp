@@ -79,11 +79,11 @@ enum invsens_func_type {
 	INV_FUNC_GYRO,
 	INV_FUNC_COMPASS,
 	INV_FUNC_GAMING_ROTATION_VECTOR,
+	INV_FUNC_ROTATION_VECTOR = 3,
 	INV_FUNC_SIGNIFICANT_MOTION_DETECT,
 	INV_FUNC_STEP_DETECT,
 	INV_FUNC_STEP_COUNT,
 	INV_FUNC_SCREEN_ORIENTATION,
-	INV_FUNC_ROTATION_VECTOR,
 	INV_FUNC_GEOMAG_ROTATION_VECTOR,
 	INV_FUNC_BATCH,
 	INV_FUNC_FLUSH,
@@ -118,8 +118,6 @@ enum invsens_ioctl_cmd {
 	INV_IOCTL_RESET_FIFO,
 	INV_IOCTL_NUM
 };
-
-
 
 struct invsense_ioctl_swst_gyro_t {
 	int result;
@@ -270,7 +268,19 @@ struct invsens_driver_t {
 	void *user_data;
 };
 
+#define SM_DRIVER_LIST_MAX (4)
+struct invsens_sm_cfg {
+	struct invsens_board_cfg_t *board_cfg;
 
+	struct invsens_driver_t *driver_list[SM_DRIVER_LIST_MAX];
+	struct invsens_sm_ctrl_t sm_ctrl;
+	struct invsens_driver_t *dmp_drv;
+
+	u16 driver_count;
+	u32 enabled_mask;
+	long delays[INV_FUNC_NUM];
+	s64 oldtimestamp[INV_FUNC_NUM];
+};
 
 #define INVSENS_DRV_USER_DATA(_handle_) \
 		(_handle_->user_data)

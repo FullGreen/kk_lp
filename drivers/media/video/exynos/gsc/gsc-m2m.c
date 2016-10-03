@@ -29,7 +29,12 @@
 
 #include "gsc-core.h"
 
+#ifdef CONFIG_SOC_EXYNOS5260
+#define SMC_PROTECTION_SET	0x83000000
+#else
 #define SMC_PROTECTION_SET	0x81000000
+#endif
+
 static int gsc_ctx_stop_req(struct gsc_ctx *ctx)
 {
 	struct gsc_ctx *curr_ctx;

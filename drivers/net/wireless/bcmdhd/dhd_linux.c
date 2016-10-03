@@ -3302,6 +3302,9 @@ dhd_stop(struct net_device *net)
 			if ((dhd->dhd_state & DHD_ATTACH_STATE_ADD_IF) &&
 				(dhd->dhd_state & DHD_ATTACH_STATE_CFG80211)) {
 				int i;
+#if defined(CUSTOMER_HW4) && defined(WL_CFG80211_P2P_DEV_IF)
+				wl_cfg80211_del_p2p_wdev();
+#endif /* CUSTOMER_HW4 && WL_CFG80211_P2P_DEV_IF */
 
 				dhd_net_if_lock_local(dhd);
 				for (i = 1; i < DHD_MAX_IFS; i++)

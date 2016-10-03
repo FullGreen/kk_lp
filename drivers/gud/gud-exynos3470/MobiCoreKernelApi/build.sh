@@ -8,7 +8,7 @@ fi
 
 ROOT_PATH=$(dirname $(readlink -f $BASH_SOURCE))
 # These folders need to be relative to the kernel dir or absolute!
-PLATFORM=EXYNOS_4X12_STD
+PLATFORM=EXYNOS_3470_STD
 CODE_INCLUDE=$(readlink -f $ROOT_PATH/Locals/Code)
 
 MOBICORE_DRIVER=$COMP_PATH_MobiCoreDriverMod

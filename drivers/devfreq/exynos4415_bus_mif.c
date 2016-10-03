@@ -169,13 +169,13 @@ static unsigned int exynos4415_dram_parameter_1_2gb[][3] = {
 /* Drex timing parameters for 1.5GB */
 static unsigned int exynos4415_dram_parameter_1nhalfgb[][3] = {
 	/* timiningRow, timingData, timingPower */
-	{ 0x3A4764CD, 0x35302509, 0x383C0335},	/* 543Mhz */
-	{ 0x2C35538A, 0x24202509, 0x2C2E0225},	/* 413Mhz */
-	{ 0x1D244287, 0x23202509, 0x1C1F0225},	/* 275Mhz */
-	{ 0x192331C6, 0x23202509, 0x18170225},	/* 206Mhz */
-	{ 0x19223185, 0x23202509, 0x14130225},	/* 165Mhz */
-	{ 0x19222144, 0x23202509, 0x10100225},	/* 138Mhz */
-	{ 0x19222103, 0x23202509, 0x100C0225},	/* 103Mhz */
+	{ 0x3A4764CD, 0x35302509, 0x38700335},  /* 543Mhz */
+	{ 0x2C35538A, 0x24202509, 0x2C550225},  /* 413Mhz */
+	{ 0x1D244287, 0x23202509, 0x1C390225},  /* 275Mhz */
+	{ 0x192331C6, 0x23202509, 0x182B0225},  /* 206Mhz */
+	{ 0x19233185, 0x23202509, 0x14220225},  /* 165Mhz */
+	{ 0x19232144, 0x23202509, 0x101F0225},  /* 138Mhz */
+	{ 0x19232103, 0x23202509, 0x101F0225},  /* 103Mhz */
 };
 static unsigned int (*dram_timing_parameter)[3];
 #endif
@@ -534,6 +534,7 @@ static struct devfreq_simple_exynos_data exynos4415_mif_governor_data = {
 	.upthreshold		= 40,
 	.downthreshold		= 25,
 	.idlethreshold		= 20,
+	.cal_qos_max		= 543000,
 };
 
 static int exynos4415_mif_bus_get_dev_status(struct device *dev,

@@ -10,7 +10,11 @@
  */
 #ifndef __LINUX_SENSORS_CORE_H_INCLUDED
 #define __LINUX_SENSORS_CORE_H_INCLUDED
-
+#include <linux/alarmtimer.h>
+/* report timestamp from kernel (for Android L) */
+#define TIME_LO_MASK 0x00000000FFFFFFFF
+#define TIME_HI_MASK 0xFFFFFFFF00000000
+#define TIME_HI_SHIFT 32
 extern int sensors_create_symlink(struct kobject *, const char *);
 extern void sensors_remove_symlink(struct kobject *, const char *);
 

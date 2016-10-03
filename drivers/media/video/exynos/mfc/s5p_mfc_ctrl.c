@@ -116,7 +116,6 @@ int s5p_mfc_alloc_firmware(struct s5p_mfc_dev *dev)
 		return -EIO;
 	}
 
-	if (!dev->num_drm_inst) {
 		s5p_mfc_bitproc_virt =
 				s5p_mfc_mem_vaddr_priv(s5p_mfc_bitproc_buf);
 		mfc_debug(2, "Virtual address for FW: %08lx\n",
@@ -128,7 +127,6 @@ int s5p_mfc_alloc_firmware(struct s5p_mfc_dev *dev)
 			s5p_mfc_bitproc_buf = 0;
 			return -EIO;
 		}
-	}
 
 	dev->port_a = s5p_mfc_bitproc_phys;
 
@@ -489,6 +487,7 @@ int s5p_mfc_sleep(struct s5p_mfc_dev *dev)
 {
 	struct s5p_mfc_ctx *ctx;
 	int ret;
+	int old_state;
 
 	mfc_debug_enter();
 
@@ -503,6 +502,9 @@ int s5p_mfc_sleep(struct s5p_mfc_dev *dev)
 		return -EINVAL;
 	}
 
+	old_state = ctx->state;
+	ctx->state = MFCINST_ABORT;
+
 	ret = wait_event_interruptible_timeout(ctx->queue,
 			(test_bit(ctx->num, &dev->hw_lock) == 0),
 			msecs_to_jiffies(MFC_INT_TIMEOUT));
@@ -515,6 +517,8 @@ int s5p_mfc_sleep(struct s5p_mfc_dev *dev)
 	spin_lock_irq(&dev->condlock);
 	set_bit(ctx->num, &dev->hw_lock);
 	spin_unlock_irq(&dev->condlock);
+
+	ctx->state = old_state;
 
 	s5p_mfc_clock_on();
 	s5p_mfc_clean_dev_int_flags(dev);
@@ -548,7 +552,7 @@ err_mfc_sleep:
 
 int s5p_mfc_wakeup(struct s5p_mfc_dev *dev)
 {
-	int ret;
+	int ret = 0;
 
 	mfc_debug_enter();
 
@@ -556,6 +560,9 @@ int s5p_mfc_wakeup(struct s5p_mfc_dev *dev)
 		mfc_err("no mfc device to run\n");
 		return -EINVAL;
 	}
+
+	/* Set clock source again after wake up */
+	s5p_mfc_set_clock_parent(dev);
 
 	/* 0. MFC reset */
 	mfc_debug(2, "MFC reset...\n");
@@ -621,6 +628,6 @@ err_mfc_wakeup:
 	s5p_mfc_clock_off();
 	mfc_debug_leave();
 
-	return 0;
+	return ret;
 }
 

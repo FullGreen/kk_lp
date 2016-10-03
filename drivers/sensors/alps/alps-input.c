@@ -47,6 +47,8 @@ static struct early_suspend alps_early_suspend_handler;
 #define EVENT_TYPE_MAGV_X           REL_X
 #define EVENT_TYPE_MAGV_Y           REL_Y
 #define EVENT_TYPE_MAGV_Z           REL_Z
+#define EVENT_TYPE_MAG_TIME_HI      REL_MISC
+#define EVENT_TYPE_MAG_TIME_LO      REL_WHEEL
 
 #define ALPS_POLL_INTERVAL   200    /* msecs */
 #define ALPS_INPUT_FUZZ        0    /* input event threshold */
@@ -69,7 +71,7 @@ static int mag_delay = SENSOR_DEFAULT_DELAY;
 static int poll_stop_cnt;
 #endif
 static struct input_dev *idev;
-
+s64 old_timestamp;
 /* for I/O Control */
 static long alps_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 {
@@ -101,14 +103,13 @@ static long alps_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 		}
 
 		mutex_lock(&alps_lock);
-		if (tmpval <= 15)
+		if (tmpval < 10)
 			tmpval = 10;
-		else if (tmpval <= 45)
-			tmpval = 20;
-		else if (tmpval <= 135)
-			tmpval = 70;
-		else
+		else if (tmpval > 200)
 			tmpval = 200;
+
+		if ((tmpval % (MSEC_PER_SEC/HZ)) != 0)
+			tmpval = tmpval - (tmpval % (MSEC_PER_SEC/HZ));
 
 		mag_delay = tmpval;
 		hscd_activate(1, flag_mag, mag_delay);
@@ -240,15 +241,40 @@ static struct early_suspend alps_early_suspend_handler = {
 static void hscd_poll(struct input_dev *idev)
 {
 	int xyz[3] = {0, };
+	int time_hi, time_lo;
+	struct timespec ts = ktime_to_timespec(ktime_get_boottime());
+	s64 timestamp_new = ts.tv_sec * 1000000000LL + ts.tv_nsec;
+	s64 delay = mag_delay * 1000000LL;
+	s64 shift_timestamp = delay >> 1;
+	s64 timestamp = 0LL;
 
 	if (hscd_get_magnetic_field_data(xyz) == 0) {
+		if (old_timestamp != 0 && ((timestamp_new - old_timestamp) * 10 > delay * 18)) {
+			for (timestamp = old_timestamp + delay; timestamp < timestamp_new - shift_timestamp; timestamp += delay) {
+				time_hi = (int)((timestamp & TIME_HI_MASK) >> TIME_HI_SHIFT);
+				time_lo = (int)(timestamp & TIME_LO_MASK);
+				input_report_rel(idev, EVENT_TYPE_MAGV_X, xyz[0]);
+				input_report_rel(idev, EVENT_TYPE_MAGV_Y, xyz[1]);
+				input_report_rel(idev, EVENT_TYPE_MAGV_Z, xyz[2]);
+				input_report_rel(idev, EVENT_TYPE_MAG_TIME_HI, time_hi);
+				input_report_rel(idev, EVENT_TYPE_MAG_TIME_LO, time_lo);
+				input_sync(idev);
+				old_timestamp = timestamp;
+			}
+		}
+
+		time_hi = (int)((timestamp_new & TIME_HI_MASK) >> TIME_HI_SHIFT);
+		time_lo = (int)(timestamp_new & TIME_LO_MASK);
 #ifdef ALPS_DEBUG
 		alps_dbgmsg("%d, %d, %d\n", xyz[0], xyz[1], xyz[2]);
 #endif
 		input_report_rel(idev, EVENT_TYPE_MAGV_X, xyz[0]);
 		input_report_rel(idev, EVENT_TYPE_MAGV_Y, xyz[1]);
 		input_report_rel(idev, EVENT_TYPE_MAGV_Z, xyz[2]);
+		input_report_rel(idev, EVENT_TYPE_MAG_TIME_HI, time_hi);
+		input_report_rel(idev, EVENT_TYPE_MAG_TIME_LO, time_lo);
 		input_sync(idev);
+		old_timestamp = timestamp_new;
 	}
 }
 
@@ -279,9 +305,13 @@ magnetic_enable_store(struct device *dev, struct device_attribute *attr,
 	int err = 0;
 
 	err = kstrtoint(buf, 10, &value);
+	if (err < 0) {
+		pr_err("Error while parsing buffer, err=%d\n", err);
+		return -EINVAL;
+	}
 
 	alps_info("value = %d\n", value);
-
+	old_timestamp = 0LL;
 	mutex_lock(&alps_lock);
 	flag_mag = value;
 	hscd_activate(1, flag_mag, mag_delay);
@@ -316,14 +346,13 @@ magnetic_delay_store(struct device *dev, struct device_attribute *attr,
 	new_delay = ((int)delay_ns / 1000000);
 	alps_info("new_delay = %d, old_delay = %d", new_delay, mag_delay);
 
-	if (new_delay <= 15)
+	if (new_delay < 10)
 		new_delay = 10;
-	else if (new_delay <= 45)
-		new_delay = 20;
-	else if (new_delay <= 135)
-		new_delay = 70;
-	else
-		new_delay = SENSOR_DEFAULT_DELAY;
+	else if (new_delay > 200)
+		new_delay = 200;
+
+	if ((new_delay % (MSEC_PER_SEC/HZ)) != 0)
+		new_delay = new_delay - (new_delay % (MSEC_PER_SEC/HZ));
 
 	mag_delay = new_delay;
 
@@ -396,6 +425,8 @@ static int __init alps_init(void)
 	input_set_capability(idev, EV_REL, REL_X);
 	input_set_capability(idev, EV_REL, REL_Y);
 	input_set_capability(idev, EV_REL, REL_Z);
+	input_set_capability(idev, EV_REL, EVENT_TYPE_MAG_TIME_HI);
+	input_set_capability(idev, EV_REL, EVENT_TYPE_MAG_TIME_LO);
 
 	ret = input_register_polled_device(alps_idev);
 	if (ret)

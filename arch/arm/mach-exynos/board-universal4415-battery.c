@@ -733,7 +733,11 @@ sec_battery_platform_data_t sec_battery_pdata = {
 	.repeated_fuelalert = false,
 	.capacity_calculation_type =
 		SEC_FUELGAUGE_CAPACITY_TYPE_DYNAMIC_SCALE,
-	.capacity_max = 1000,
+#if defined(CONFIG_MACH_MEGA2LTE_USA_ATT)
+	.capacity_max = 970,
+#else
+	.capacity_max = 950,
+#endif
 	.capacity_min = 0,
 	.capacity_max_margin = 30,
 

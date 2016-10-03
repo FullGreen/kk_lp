@@ -526,6 +526,11 @@ static int sc_v4l2_s_fmt_mplane(struct file *file, void *fh,
 		return -EINVAL;
 	}
 
+	if (pixm->reserved[SC_FMT_PREMULTI_FLAG] != 0)
+		frame->pre_multi = true;
+	else
+		frame->pre_multi = false;
+
 	frame->width = pixm->width;
 	frame->height = pixm->height;
 	frame->pixelformat = pixm->pixelformat;
@@ -677,6 +682,15 @@ static int sc_v4l2_s_crop(struct file *file, void *fh, struct v4l2_crop *cr)
 	v4l_bound_align_image(&cr->c.left, 0, frame->width - cr->c.width,
 			x_align, &cr->c.top, 0, frame->height - cr->c.height,
 			y_align, 0);
+
+	if ((frame->width < (cr->c.left + cr->c.width)) ||
+		(frame->height < (cr->c.top + cr->c.height))) {
+		v4l2_err(&ctx->sc_dev->m2m.v4l2_dev,
+			"Out of crop range: (%d,%d,%d,%d) from %dx%d\n",
+			cr->c.left, cr->c.top, cr->c.width, cr->c.height,
+			frame->width, frame->height);
+		return -EINVAL;
+	}
 
 	frame->crop.top = cr->c.top;
 	frame->crop.left = cr->c.left;
@@ -2057,8 +2071,8 @@ static void sc_m2m_device_run(void *priv)
 
 	sc_hwset_src_image_format(sc, s_frame->sc_fmt->pixelformat);
 	sc_hwset_dst_image_format(sc, d_frame->sc_fmt->pixelformat);
-	if (ctx->pre_multi)
-		sc_hwset_pre_multi_format(sc);
+
+	sc_hwset_pre_multi_format(sc, s_frame->pre_multi, d_frame->pre_multi);
 
 	sc_hwset_src_imgsize(sc, s_frame);
 	sc_hwset_dst_imgsize(sc, d_frame);
@@ -2299,6 +2313,53 @@ static void sc_clk_put_new(struct sc_dev *sc)
 	}
 }
 
+static char *sysmmu_fault_name[SYSMMU_FAULTS_NUM] = {
+	"PAGE FAULT",
+	"AR MULTI-HIT FAULT",
+	"AW MULTI-HIT FAULT",
+	"BUS ERROR",
+	"AR SECURITY PROTECTION FAULT",
+	"AR ACCESS PROTECTION FAULT",
+	"AW SECURITY PROTECTION FAULT",
+	"AW ACCESS PROTECTION FAULT",
+	"UNKNOWN FAULT"
+};
+
+static int sc_sysmmu_fault_handler(struct device *dev, const char *mmuname,
+		enum exynos_sysmmu_inttype itype, unsigned long pgtable_base,
+		unsigned long fault_addr)
+{
+	struct sc_dev *sc = dev_get_drvdata(dev);
+	unsigned long *ent;
+
+	if (itype == SYSMMU_BUSERROR) /* System MMU driver recovers this */
+		return 0;
+
+	pr_err("%s occured at 0x%lx by '%s'(Page table base: 0x%lx)\n",
+		sysmmu_fault_name[itype], fault_addr, mmuname, pgtable_base);
+
+	ent = __va(pgtable_base) + (fault_addr >> 20);
+	pr_err("\tLv1 entry: 0x%lx\n", *ent);
+
+	if (*ent & 1) {
+		ent = __va(*ent & ~0x3FF) + ((fault_addr >> 12) & 0xFF);
+		pr_err("\t Lv2 entry: 0x%lx\n", *ent);
+	}
+
+	pr_err("Dumping Scaler%d Registers\n", sc->id);
+	print_hex_dump(KERN_ERR, "", DUMP_PREFIX_ADDRESS, 32, 4, sc->regs,
+			0x02C0, false);
+	pr_err("...\n");
+	print_hex_dump(KERN_ERR, "", DUMP_PREFIX_ADDRESS, 32, 4,
+			sc->regs + 0x1000, 0x294, false);
+
+	pr_err("Generating Kernel OOPS... because it is unrecoverable.\n");
+
+	BUG();
+
+	return -EFAULT;
+}
+
 static int sc_probe(struct platform_device *pdev)
 {
 	struct exynos_scaler_platdata *pdata;
@@ -2392,6 +2453,8 @@ static int sc_probe(struct platform_device *pdev)
 		ret = -EPERM;
 		goto err_clk;
 	}
+
+	exynos_sysmmu_set_fault_handler(&pdev->dev, sc_sysmmu_fault_handler);
 
 	dev_info(&pdev->dev, "scaler registered successfully\n");
 

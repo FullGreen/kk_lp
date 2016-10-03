@@ -490,6 +490,10 @@ static int link_pm_usb_resume(struct usb_device *udev, pm_message_t msg)
 		if (udev == pmdata->hdev) {
 			dir = get_direction(pmdata);
 			if (dir == AP2CP) {
+				/* delay for CP to wake up from hibernation */
+				mif_info("10ms delay for waiting CP\n");
+				mdelay(10);
+
 				ret = link_pm_usb_ap_init_resume_gpio_ctrl(
 						pmdata);
 				if (ret < 0)

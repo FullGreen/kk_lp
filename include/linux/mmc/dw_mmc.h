@@ -267,6 +267,10 @@ struct dw_mci_dma_ops {
 #define DW_MMC_QUIRK_USE_FINE_TUNING		BIT(11)
 /* Retry CRC error */
 #define DW_MMC_QUIRK_RETRY_CRC_ERROR		BIT(12)
+/* Use the security management unit */
+#define DW_MCI_QUIRK_USE_SMU			BIT(13)
+/* Enables ultra low power mode */
+#define DW_MCI_QUIRK_ENABLE_ULP			BIT(14)
 
 enum dw_mci_cd_types {
 	DW_MCI_CD_INTERNAL,	/* use mmc internal CD line */
@@ -420,6 +424,7 @@ struct dw_mci_board {
 	struct dw_mci_clk *clk_tbl;
 	struct dw_mci_mon_table *tp_mon_tbl;
 	unsigned int sw_timeout;
+	unsigned int data_timeout;
 	u16 tuning_map[MAX_TUNING_RETRIES];
 	unsigned int dev_drv_str;
 #define DW_MMC_MISC_LOW_FREQ_HOOK	BIT(0)

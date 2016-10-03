@@ -1277,6 +1277,14 @@ static void sm5502_muic_handle_attach(struct sm5502_muic_data *muic_data,
 			ret = detach_deskdock(muic_data);
 		}
 		break;
+	case ATTACHED_DEV_PS_CABLE_MUIC:
+		if (new_dev != muic_data->attached_dev) {
+			pr_warn("%s:%s new(%d)!=attached(%d), assume detach\n",
+					MUIC_DEV_NAME, __func__, new_dev,
+					muic_data->attached_dev);
+			ret = detach_charger(muic_data);
+		}
+		break;
 	default:
 		break;
 	}
@@ -1294,6 +1302,7 @@ static void sm5502_muic_handle_attach(struct sm5502_muic_data *muic_data,
 	case ATTACHED_DEV_AUDIODOCK_MUIC:
 		ret = attach_audiodock(muic_data, new_dev, vbvolt);
 		break;
+	case ATTACHED_DEV_PS_CABLE_MUIC:
 	case ATTACHED_DEV_TA_MUIC:
 	case ATTACHED_DEV_UNKNOWN_VB_MUIC:
 		com_to_open_with_vbus(muic_data);
@@ -1342,6 +1351,7 @@ static void sm5502_muic_handle_detach(struct sm5502_muic_data *muic_data)
 	case ATTACHED_DEV_OTG_MUIC:
 		ret = detach_otg_usb(muic_data);
 		break;
+	case ATTACHED_DEV_PS_CABLE_MUIC:
 	case ATTACHED_DEV_TA_MUIC:
 		ret = detach_charger(muic_data);
 		break;
@@ -1422,6 +1432,11 @@ static void sm5502_muic_detect_dev(struct sm5502_muic_data *muic_data)
 		pr_info("%s : USB DETECTED\n", MUIC_DEV_NAME);
 		break;
 	case DEV_TYPE1_DEDICATED_CHG:
+		if (adc == ADC_PS_CABLE) {
+			pr_info("%s : PS cable charging\n", MUIC_DEV_NAME);
+			break;
+		}
+
 		intr = MUIC_INTR_ATTACH;
 		new_dev = ATTACHED_DEV_TA_MUIC;
 		pr_info("%s : CHARGER DETECTED\n", MUIC_DEV_NAME);
@@ -1471,6 +1486,11 @@ static void sm5502_muic_detect_dev(struct sm5502_muic_data *muic_data)
 		use ADC to find the attached device */
 	if(intr != MUIC_INTR_ATTACH)
 		switch (adc) {
+		case ADC_PS_CABLE : /* 102k ohm */
+			intr = MUIC_INTR_ATTACH;
+			new_dev = ATTACHED_DEV_PS_CABLE_MUIC;
+			pr_info("%s : PS CABLE DETECTED\n", MUIC_DEV_NAME);
+			break;
 		case ADC_CEA936ATYPE1_CHG : /*200k ohm */
 			intr = MUIC_INTR_ATTACH;
 			/* This is workaournd for LG USB cable which has 219k ohm ID */

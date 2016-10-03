@@ -38,6 +38,9 @@
 #define INVSENS_SELFTEST_BUF_LEN 256
 #define INVSENS_IIO_BUFFER_DATUM 240
 
+// SMD Register
+#define D_SMD_MOT_THLD          (21 * 16 + 8)
+
 struct invsens_iio_data {
 	struct iio_dev *indio_dev;
 
@@ -254,6 +257,64 @@ static ssize_t invsens_control_store(struct device *dev,
 
 	return strlen(buf);
 }
+
+static ssize_t invsens_smd_threshold_store(struct device *dev,
+				     struct device_attribute *attr,
+				     const char *buf, size_t count)
+{
+	int result = 0;
+	int data = 0;
+	struct iio_dev *indio_dev = dev_get_drvdata(dev);
+	struct invsens_iio_data *iio_data = iio_priv(indio_dev);
+	u8 d[2];
+
+    result = kstrtoint(buf, 10, &data);
+	if (result < 0) {
+		pr_err("Invalid smd threshold value, %s, %d\n", buf, result);
+		return -EINVAL;
+	}
+
+	d[0] = (u8) ((data >> 8) & 0xff);
+	d[1] = (u8) (data & 0xff);
+
+	result = inv_i2c_mem_write(&iio_data->i2c_handler,
+				iio_data->sm_data.board_cfg.i2c_addr, D_SMD_MOT_THLD,
+				ARRAY_SIZE(d), d);
+
+	if (result < 0) {
+		pr_err("I2C write fail for smd threshold value, %d\n", result);
+		return -1;
+	}
+
+	return strlen(buf);
+}
+
+static ssize_t invsens_smd_threshold_show(struct device *dev,
+				     struct device_attribute *attr,
+				     char *buf)
+{
+	int result = 0;
+	struct iio_dev *indio_dev = dev_get_drvdata(dev);
+	struct invsens_iio_data *iio_data = iio_priv(indio_dev);
+	u8 d[2];
+	int smd_thresh;
+
+	result = inv_i2c_mem_read(&iio_data->i2c_handler,
+				iio_data->sm_data.board_cfg.i2c_addr, D_SMD_MOT_THLD,
+				ARRAY_SIZE(d), d);
+
+	if (result < 0) {
+		pr_err("I2C read fail for smd threshold value, %d\n", result);
+		return -1;
+	}
+
+	smd_thresh = d[1] + (int) (d[0] << 8);
+
+	sprintf(buf, "%d\n", smd_thresh);
+
+	return strlen(buf);
+}
+
 /*
 static ssize_t invsens_log_level_show(struct device *dev,
 				      struct device_attribute *attr,
@@ -682,6 +743,8 @@ static IIO_DEVICE_ATTR(hwst_gyro, S_IRUGO | S_IWUSR,
 		       invsens_hwst_gyro_show, NULL, 0);
 static IIO_DEVICE_ATTR(swst_compass, S_IRUGO | S_IWUSR,
 		       invsens_swst_compass_show, NULL, 0);
+static IIO_DEVICE_ATTR(smd_threshold, S_IRUGO,
+		       invsens_smd_threshold_show, invsens_smd_threshold_store, 0);
 
 
 static struct attribute *invsens_attributes[] = {
@@ -692,6 +755,7 @@ static struct attribute *invsens_attributes[] = {
 	&iio_dev_attr_hwst_accel.dev_attr.attr,
 	&iio_dev_attr_hwst_gyro.dev_attr.attr,
 	&iio_dev_attr_swst_compass.dev_attr.attr,
+	&iio_dev_attr_smd_threshold.dev_attr.attr,
 	NULL,
 };
 
@@ -821,8 +885,6 @@ static irqreturn_t invsens_irq_handler(int irq, void *user_data)
 
 	INV_DBG_FUNC_NAME;
 
-	data_list.timestamp = iio_get_time_ns();
-
 	return IRQ_WAKE_THREAD;
 }
 
@@ -901,6 +963,96 @@ static void invsens_prefetch_data(struct invsens_iio_data *iio_data,
 	}
 }
 
+static int parse_header(u16 hdr)
+{
+	int sensor_type = 0;
+	switch(hdr)
+	{
+		case INV_DATA_HDR_ACCEL	:
+			sensor_type = INV_FUNC_ACCEL;
+			break;
+		case INV_DATA_HDR_GYRO	:
+			sensor_type = INV_FUNC_GYRO;
+			break;
+		case INV_DATA_HDR_COMPASS	:
+			sensor_type = INV_FUNC_COMPASS;
+			break;
+		case INV_DATA_HDR_STEPDET	:
+			sensor_type = INV_FUNC_STEP_DETECT;
+			break;
+		case INV_DATA_HDR_LPQUAT	:
+			sensor_type = INV_FUNC_ROTATION_VECTOR;
+			break;
+		case INV_DATA_HDR_6AXIS_QUAT	:
+			sensor_type = INV_FUNC_GAMING_ROTATION_VECTOR;
+			break;
+		case INV_DATA_HDR_PEDO	:
+			sensor_type = INV_FUNC_STEP_COUNT;
+			break;
+		case INV_DATA_HDR_SMD	:
+			sensor_type = INV_FUNC_SIGNIFICANT_MOTION_DETECT;
+			break;
+		default :
+			pr_err("\n Invalid header ");
+	}
+	return sensor_type;
+}
+
+static void checkTimestamp (struct invsens_iio_data *iio_data, int sensor_type, struct invsens_data_t *p , int prev_index)
+{
+	int index = prev_index;
+	struct iio_buffer *iio_buffer ;
+	struct invsens_sm_data_t *sm = &iio_data->sm_data;
+	struct invsens_sm_cfg *smcfg = sm->user_data;
+	uint8_t *copy_buffer = data_list.copy_buffer;
+	s64 old_timestamp = smcfg->oldtimestamp[sensor_type];
+	s64 delay = (s64)(smcfg->delays[sensor_type]);
+	s64 timestamp_temp,timestamp,shift_timestamp = delay >> 1;
+	int timestamp_size = sizeof(timestamp_temp);
+
+	timestamp = data_list.timestamp;
+	if (old_timestamp != 0 && ((timestamp - old_timestamp) * 10 > delay * 18)) {
+		for (timestamp_temp = old_timestamp + delay; timestamp_temp < timestamp - shift_timestamp; timestamp_temp += delay) {
+			u16 packet_header = INVSENS_PACKET_HEADER;
+			u16 packet_size;
+			u16 packet_size_offset;
+			index = prev_index;
+			iio_buffer = iio_data->indio_dev->buffer;
+			/*put header into buffer first*/
+			/*fill packet header */
+			memcpy(&copy_buffer[index], &packet_header,
+				sizeof(packet_header));
+			index += sizeof(packet_header);
+			packet_size_offset = index;
+			/*leave packet size empty,
+			 *it will be filled out at the bottom*/
+			index += sizeof(packet_size);
+
+			/*copy timestamp*/
+			memcpy(&copy_buffer[index], (void *) &timestamp_temp,
+		       timestamp_size);
+			index += timestamp_size;
+
+			/*put header into buffer first*/
+			memcpy(&copy_buffer[index], &p->hdr, sizeof(p->hdr));
+			index += sizeof(p->hdr);
+
+			/*put data into buffer*/
+			memcpy(&copy_buffer[index], p->data, p->length);
+			index += p->length;
+
+			/*fill packet size*/
+			packet_size = (u16)(index-prev_index);
+			memcpy(&copy_buffer[packet_size_offset],
+				&packet_size, sizeof(packet_size));
+
+			iio_buffer->access->store_to(iio_buffer, copy_buffer+prev_index,
+							 timestamp_temp);
+			smcfg->oldtimestamp[sensor_type] = timestamp_temp;
+		}
+	}
+}
+
 static void invsens_store_to_buffer(struct invsens_iio_data *iio_data)
 {
 	s64 timestamp;
@@ -908,7 +1060,9 @@ static void invsens_store_to_buffer(struct invsens_iio_data *iio_data)
 	struct iio_buffer *iio_buffer = NULL;
 	struct invsens_data_t *p = NULL;
 	int i = 0, ind = 0;
-
+	int sensor_type;
+	struct invsens_sm_data_t *sm = &iio_data->sm_data;
+	struct invsens_sm_cfg *smcfg = sm->user_data;
 	timestamp = data_list.timestamp;
 	copy_buffer = data_list.copy_buffer;
 
@@ -931,12 +1085,19 @@ static void invsens_store_to_buffer(struct invsens_iio_data *iio_data)
 
 		/*copy timestamp*/
 		memcpy(&copy_buffer[ind], (void *) &timestamp,
-		       timestamp_size);
+			   timestamp_size);
 		ind += timestamp_size;
 
 		/*fill sensor data into copy buffer*/
 		for (i = 0; i < data_list.count; i++) {
 			p = &data_list.items[i];
+			sensor_type	= parse_header(p->hdr);
+
+			if (INV_FUNC_STEP_DETECT != sensor_type && INV_FUNC_STEP_COUNT != sensor_type)
+				checkTimestamp(iio_data, sensor_type, p , ind);
+
+			if (timestamp - smcfg->oldtimestamp[sensor_type] < 1000000LL)
+				continue;
 
 			/*put header into buffer first*/
 			memcpy(&copy_buffer[ind], &p->hdr, sizeof(p->hdr));
@@ -945,6 +1106,7 @@ static void invsens_store_to_buffer(struct invsens_iio_data *iio_data)
 			/*put data into buffer*/
 			memcpy(&copy_buffer[ind], p->data, p->length);
 			ind += p->length;
+			smcfg->oldtimestamp[sensor_type] = timestamp;
 		}
 
 		/*fill packet size*/
@@ -955,7 +1117,6 @@ static void invsens_store_to_buffer(struct invsens_iio_data *iio_data)
 		iio_buffer->access->store_to(iio_buffer, copy_buffer,
 					     timestamp);
 	}
-
 }
 
 static irqreturn_t invsens_thread_handler(int irq, void *user_data)
@@ -972,8 +1133,8 @@ static irqreturn_t invsens_thread_handler(int irq, void *user_data)
 	if (down_trylock(&iio_data->sema))
 		goto error_trylock;
 
+	data_list.timestamp = iio_get_time_ns();
 	result = invsens_sm_read(&iio_data->sm_data, &data_list);
-	up(&iio_data->sema);
 
 	invsens_prefetch_data(iio_data, &need_to_store);
 
@@ -986,6 +1147,7 @@ static irqreturn_t invsens_thread_handler(int irq, void *user_data)
 	data_list.event_motion_interrupt_notified = false;
 	data_list.request_fifo_reset = false;
 
+	up(&iio_data->sema);
 error_trylock:
 	return IRQ_HANDLED;
 }

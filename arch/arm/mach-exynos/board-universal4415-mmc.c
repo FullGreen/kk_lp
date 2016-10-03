@@ -545,6 +545,7 @@ static void exynos_dwmci2_exit(u32 slot_id)
 static struct dw_mci_board universal4415_dwmci2_pdata __initdata = {
 	.num_slots		= 1,
 	.ch_num			= 2,
+	.data_timeout   = 200,
 	.quirks			= DW_MCI_QUIRK_HIGHSPEED |
 				  DW_MMC_QUIRK_NO_VOLSW_INT |
 				  DW_MMC_QUIRK_USE_FINE_TUNING,

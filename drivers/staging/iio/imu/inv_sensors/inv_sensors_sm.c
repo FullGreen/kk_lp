@@ -11,22 +11,6 @@
 #endif	/* CONFIG_INV_SENSORS_DMP */
 
 
-
-#define SM_DRIVER_LIST_MAX (4)
-
-struct invsens_sm_cfg {
-	struct invsens_board_cfg_t *board_cfg;
-
-	struct invsens_driver_t *driver_list[SM_DRIVER_LIST_MAX];
-	struct invsens_sm_ctrl_t sm_ctrl;
-	struct invsens_driver_t *dmp_drv;
-
-	u16 driver_count;
-	u32 enabled_mask;
-	long delays[INV_FUNC_NUM];
-};
-
-
 static int sm_init_cfg(struct invsens_sm_cfg *smcfg)
 {
 	int res = SM_SUCCESS;
@@ -38,7 +22,7 @@ static int sm_init_cfg(struct invsens_sm_cfg *smcfg)
 	for (i = 0; i < INV_FUNC_NUM; i++) {
 		/* internal purpose of delay */
 		smcfg->delays[i] = SM_DELAY_DEFAULT;
-
+		smcfg->oldtimestamp[i] = 0LL;
 		/* sharing purpose of delay */
 		smcfg->sm_ctrl.delays[i] = SM_DELAY_DEFAULT;
 	}
@@ -109,9 +93,6 @@ static u32 sm_get_physical_func(u32 func)
 	u32 mask = 0;
 
 	switch (func) {
-	case INV_FUNC_GAMING_ROTATION_VECTOR:
-		mask = ((1 << INV_FUNC_ACCEL) | (1 << INV_FUNC_GYRO));
-		break;
 	case INV_FUNC_SIGNIFICANT_MOTION_DETECT:
 		mask = (1 << INV_FUNC_ACCEL);
 		break;
@@ -401,27 +382,50 @@ int invsens_sm_enable_sensor(struct invsens_sm_data_t *sm, u32 func,
 		return -SM_EINVAL;
 
 	/*if same sensor is enabled with same delay, skip enabling*/
-	if (enable &&
-		(smcfg->enabled_mask & (1 << func)) &&
-		(smcfg->delays[func] == delay)) {
+	if (enable && (smcfg->enabled_mask & (1 << func)) &&
+		((delay == -1) || (smcfg->delays[func] == delay))) {
 
 		INVSENS_LOGD("same sensor is working : func = %d, delay=%ld\n",
 			func, delay);
-
 		return SM_SUCCESS;
 	}
 
 	if (enable)
+	{
+		if (delay > 200000000)
+			delay = 200000000;
+		else if( delay < 10000000)
+			delay = 10000000;
+		if( func == INV_FUNC_ROTATION_VECTOR || func == INV_FUNC_GAMING_ROTATION_VECTOR)
+		{
+			smcfg->oldtimestamp[INV_FUNC_ACCEL] = 0LL;
+			smcfg->oldtimestamp[INV_FUNC_GYRO] = 0LL;
+			smcfg->oldtimestamp[INV_FUNC_ROTATION_VECTOR] = 0LL;
+			smcfg->delays[INV_FUNC_ACCEL] = delay;
+			smcfg->delays[INV_FUNC_GYRO] = delay;
+			smcfg->delays[INV_FUNC_ROTATION_VECTOR] = delay;
+		}
+		else {
+			smcfg->oldtimestamp[func] = 0LL;
+			smcfg->delays[func] = delay;
+		}
 		enable_mask = smcfg->enabled_mask | (1 << func);
+	}
 	else
+	{
 		enable_mask = smcfg->enabled_mask & ~(1 << func);
-
-	if (delay > 0)
-		smcfg->delays[func] = delay;
-
+		if( func == INV_FUNC_ROTATION_VECTOR || func == INV_FUNC_GAMING_ROTATION_VECTOR)
+		{
+			smcfg->delays[INV_FUNC_ACCEL] = SM_DELAY_DEFAULT;
+			smcfg->delays[INV_FUNC_GYRO] = SM_DELAY_DEFAULT;
+			smcfg->delays[INV_FUNC_ROTATION_VECTOR] = SM_DELAY_DEFAULT;
+		}
+		else
+		{
+			smcfg->delays[func] = SM_DELAY_DEFAULT;
+		}
+	}
 	(void) sm_update_smctl(smcfg, enable_mask);
-
-
 	/*enable physical driver */
 	for (i = 0; i < smcfg->driver_count; i++) {
 		drv = smcfg->driver_list[i];

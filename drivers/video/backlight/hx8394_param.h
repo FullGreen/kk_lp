@@ -274,4 +274,3 @@ static const unsigned char *SEQ_CABC_MODE[CABC_MODE_MAX] = {
 };
 
 #endif /* __HX8394_C_PARAM_H__ */
-

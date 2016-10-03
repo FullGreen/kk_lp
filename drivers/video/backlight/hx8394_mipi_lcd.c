@@ -744,4 +744,3 @@ struct mipi_dsim_lcd_driver hx8394_mipi_lcd_driver = {
 	.suspend	= hx8394_suspend,
 	.resume		= hx8394_resume,
 };
-

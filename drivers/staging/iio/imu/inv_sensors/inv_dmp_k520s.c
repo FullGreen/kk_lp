@@ -99,7 +99,7 @@ struct dmp_feat_mem_t {
 #define D_SMD_DELAY2_THLD       (21 * 16 + 12)
 #define D_SMD_EXE_STATE         (22 * 16)
 #define D_SMD_DELAY_CNTR        (21 * 16)
-
+#define SMD_THRESHOLD_VALUE     (5000)
 
 #define D_PEDSTD_BP_B           (768 + 0x1C)
 #define D_PEDSTD_BP_A4          (768 + 0x40)
@@ -1103,6 +1103,12 @@ static int dmp_k520s_init(struct invdmp_driver_t *drv,
 		res = dmp_set_cal(dctl, orientation);
 		if (!res)
 			INVSENS_LOGI("%s is ready\n", drv->version);
+
+		// Initially, smd threshold value was 0. Change it to 5000
+		res = dmp_write_2bytes(dctl, D_SMD_MOT_THLD, SMD_THRESHOLD_VALUE);
+		if (res)
+			pr_err("Error in setting smd threshold, res=%d\n", res);
+
 		return SM_SUCCESS;
 	}
 

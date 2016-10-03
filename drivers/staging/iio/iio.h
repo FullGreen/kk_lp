@@ -12,6 +12,7 @@
 
 #include <linux/device.h>
 #include <linux/cdev.h>
+#include <linux/alarmtimer.h>
 #include "types.h"
 /* IIO TODO LIST */
 /*
@@ -202,12 +203,12 @@ struct iio_chan_spec {
  **/
 static inline s64 iio_get_time_ns(void)
 {
-	struct timespec ts;
+	struct timespec ts = ktime_to_timespec(ktime_get_boottime());
 	/*
 	 * calls getnstimeofday.
 	 * If hrtimers then up to ns accurate, if not microsecond.
 	 */
-	ktime_get_real_ts(&ts);
+	//ktime_get_real_ts(&ts);
 
 	return timespec_to_ns(&ts);
 }

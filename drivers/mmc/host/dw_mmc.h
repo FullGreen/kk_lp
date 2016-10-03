@@ -156,6 +156,14 @@
 /* Version ID register define */
 #define SDMMC_GET_VERID(x)		((x) & 0xFFFF)
 
+#define SDMMC_DATA_TMOUT_SHIFT		11
+#define SDMMC_RESP_TMOUT		0xFF
+#define SDMMC_DATA_TMOUT_CRT		8
+#define SDMMC_DATA_TMOUT_EXT		0x7
+#define SDMMC_DATA_TMOUT_EXT_SHIFT	8
+
+extern u32 dw_mci_calc_timeout(struct dw_mci *host);
+
 /* Register access macros */
 #define mci_readl(dev, reg)			\
 	__raw_readl((dev)->regs + SDMMC_##reg)

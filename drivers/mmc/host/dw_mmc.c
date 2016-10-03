@@ -115,6 +115,8 @@ static const u8 tuning_blk_pattern_8bit[] = {
 #define DRTO		200
 #define DRTO_MON_PERIOD	50
 
+static bool dw_mci_wait_data_busy(struct dw_mci *host, struct mmc_request *mrq);
+
 void dw_mci_ciu_clk_en(struct dw_mci *host)
 {
 	if (!atomic_read(&host->cclk_cnt)) {
@@ -432,10 +434,10 @@ void dw_mci_reg_dump(struct dw_mci *host)
 	dev_err(&host->dev, ": ===========================================\n");
 }
 
-static void dw_mci_set_timeout(struct dw_mci *host)
+static void dw_mci_set_timeout(struct dw_mci *host, u32 value)
 {
-	/* timeout (maximum) */
-	mci_writel(host, TMOUT, 0xffffffff);
+	/* timeout */
+	mci_writel(host, TMOUT, value);
 }
 
 static inline bool dw_mci_stop_abort_cmd(struct mmc_command *cmd)
@@ -1162,7 +1164,7 @@ static bool dw_mci_wait_data_busy(struct dw_mci *host, struct mmc_request *mrq)
 	u32 status;
 	unsigned long timeout = jiffies + msecs_to_jiffies(500);
 	struct dw_mci_slot *slot = host->cur_slot;
-	int try = 6;
+	int try = 2;
 	u32 clkena;
 	bool ret = false;
 
@@ -1286,6 +1288,38 @@ static void dw_mci_setup_bus(struct dw_mci_slot *slot, int force)
 	mci_writel(host, CTYPE, (slot->ctype << slot->id));
 }
 
+inline u32 dw_mci_calc_timeout(struct dw_mci *host)
+{
+	u32 target_timeout;
+	u32 count;
+	u32 host_clock = host->bus_hz;
+
+	if (!host->pdata->data_timeout)
+		return 0xFFFFFFFF; /* timeout maximum */
+
+	target_timeout = host->pdata->data_timeout;
+
+	/* Calculating Timeout value */
+	count = (target_timeout * (host_clock / 1000)) /
+		(SDMMC_DATA_TMOUT_CRT * SDMMC_DATA_TMOUT_EXT);
+
+	if (count > 0x1FFFFF)
+		count = 0x1FFFFF;
+	/* 'count' of DDR200 ULP is equal to that of DDR200
+	   But 'bus_hz' is half(200mhz) of DDR200(400mhz)
+	   So need to double 'count' for DDR200 ULP. This
+	   also satisfies the requirement that 'count' should
+	   be even for DDR200 ULP */
+	if (host->pdata->quirks & DW_MCI_QUIRK_ENABLE_ULP)
+		count *= 2;
+
+	/* Set return value */
+	return ((count << SDMMC_DATA_TMOUT_SHIFT)
+		| (SDMMC_DATA_TMOUT_EXT << SDMMC_DATA_TMOUT_EXT_SHIFT)
+		| SDMMC_RESP_TMOUT);
+}
+
+
 static void __dw_mci_start_request(struct dw_mci *host,
 				   struct dw_mci_slot *slot,
 				   struct mmc_command *cmd)
@@ -1328,7 +1362,7 @@ static void __dw_mci_start_request(struct dw_mci *host,
 
 	data = cmd->data;
 	if (data) {
-		dw_mci_set_timeout(host);
+		dw_mci_set_timeout(host, dw_mci_calc_timeout(host));
 		host->bytcnt = data->blksz * data->blocks;
 		mci_writel(host, BYTCNT, host->bytcnt);
 		mci_writel(host, BLKSIZ, data->blksz);
@@ -1850,7 +1884,7 @@ static int dw_mci_execute_tuning(struct mmc_host *mmc, u32 opcode)
 		data.sg_len = 1;
 
 		sg_init_one(&sg, tuning_blk, blksz);
-		dw_mci_set_timeout(host);
+		dw_mci_set_timeout(host, dw_mci_calc_timeout(host));
 
 		mrq.cmd = &cmd;
 		mrq.stop = &stop;

@@ -369,6 +369,7 @@ static struct exynos_pd_callback cb_pd_isp0 = {
 static struct exynos_pm_domain pm_spd_isp0_exynos4415[] = {
 	EXYNOS_MASTER_GPD(true, EXYNOS4415_ISP1_CONFIGURATION, "pd-isp1",
 		&cb_pd_isp1, NULL, false),
+	EXYNOS_MASTER_GPD(true, NULL, NULL, NULL, NULL, false),
 };
 
 static int force_power_down(struct exynos_pm_domain *pd, int power_flags)

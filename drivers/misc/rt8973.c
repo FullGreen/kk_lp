@@ -171,9 +171,9 @@ static struct id_desc id_to_cable_type_mapping[] = {
 	 .cable_type_without_vbus = ATTACHED_DEV_UNKNOWN_MUIC,
 	 },
 	{			/* 10100, 20, 0x14 */
-	 .name = "UNKNOWN",
-	 .cable_type_with_vbus = ATTACHED_DEV_UNKNOWN_VB_MUIC,
-	 .cable_type_without_vbus = ATTACHED_DEV_UNKNOWN_MUIC,
+	 .name = "PS_CABLE",
+	 .cable_type_with_vbus = ATTACHED_DEV_PS_CABLE_MUIC,
+	 .cable_type_without_vbus = ATTACHED_DEV_PS_CABLE_MUIC,
 	 },
 	{			/* 10101, 21, 0x15 */
 	/* charging in original code */
@@ -551,6 +551,8 @@ static ssize_t rt8973_muic_show_attached_dev(struct device *dev,
 		return sprintf(buf, "JIG USB ON\n");
 	case ATTACHED_DEV_DESKDOCK_MUIC:
 		return sprintf(buf, "DESKDOCK\n");
+	case ATTACHED_DEV_PS_CABLE_MUIC:
+		return sprintf(buf, "PS CABLE\n");
 	default:
 		break;
 	}
@@ -1094,6 +1096,7 @@ static char *rt8973_cable_names[] = {
 	"ATTACHED_DEV_JIG_USB_ON_MUIC",
 	"ATTACHED_DEV_UART_MUIC",
 	"ATTACHED_DEV_200K_MUIC",
+	"ATTACHED_DEV_PS_CABLE_MUIC",
 	"ATTACHED_DEV_UNKNOWN_VB_MUIC",
 	"ATTACHED_DEV_UNKNOWN_MUIC"
 };

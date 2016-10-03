@@ -130,6 +130,18 @@ static int exynos_fimc_is_sensor_pin_control(struct platform_device *pdev,
 				return PTR_ERR(regulator);
 			}
 
+#ifdef CONFIG_MFD_RT5033_RESET_WA
+			if (!strcmp(name, "cam_sensor_core_1v2")){
+				ret = regulator_get_status(regulator);
+				if((ret == 2) || (ret == 8)) {
+					pr_err("%s: RT5033 PMIC is abnormal state\n", __func__);
+					BUG_ON(1);
+				} else {
+					pr_info("%s: RT5033 regulator state 0x%x\n", __func__, ret);
+				}
+			}
+#endif
+
 			ret = regulator_enable(regulator);
 			if (ret) {
 				pr_err("%s : regulator_enable(%s) fail\n", __func__, name);

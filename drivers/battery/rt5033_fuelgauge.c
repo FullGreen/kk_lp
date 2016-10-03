@@ -1157,6 +1157,38 @@ static void rt5033_fg_create_debug_files(struct sec_fuelgauge_info *fuelgauge)
 }
 #endif /* #ifdef CONFIG_DEBUG_FS */
 
+static int rt5033_get_current_average(struct i2c_client *client)
+{
+	union power_supply_propval value_bat;
+	union power_supply_propval value_chg;
+	int curr_avg;
+
+	psy_do_property("sec-charger", get,
+		POWER_SUPPLY_PROP_CURRENT_NOW, value_chg);
+
+	/* Current_avg of USB returns -1 */
+	psy_do_property("battery", get,
+	POWER_SUPPLY_PROP_ONLINE, value_bat);
+	if (value_bat.intval == POWER_SUPPLY_TYPE_USB ||
+		value_bat.intval == POWER_SUPPLY_TYPE_USB_ACA ||
+		value_bat.intval == POWER_SUPPLY_TYPE_USB_DCP)
+		return -1;
+
+	psy_do_property("battery", get,
+		POWER_SUPPLY_PROP_HEALTH, value_bat);
+
+	if ((value_bat.intval == POWER_SUPPLY_HEALTH_OVERHEAT) ||
+			(value_bat.intval == POWER_SUPPLY_HEALTH_COLD)) {
+		pr_info("%s: Inow(%d)\n",
+			__func__, value_chg.intval);
+		curr_avg = -1;
+	} else {
+		curr_avg = value_chg.intval;
+	}
+
+	return curr_avg;
+}
+
 bool sec_hal_fg_init(struct i2c_client *client)
 {
 	int size_x,size_y;
@@ -1451,6 +1483,7 @@ bool sec_hal_fg_get_property(struct i2c_client *client,
 		case POWER_SUPPLY_PROP_CURRENT_NOW:
 			/* Average Current (mA) */
 		case POWER_SUPPLY_PROP_CURRENT_AVG:
+			val->intval = rt5033_get_current_average(client);
 			break;
 		case POWER_SUPPLY_PROP_CHARGE_FULL:
 			val->intval =

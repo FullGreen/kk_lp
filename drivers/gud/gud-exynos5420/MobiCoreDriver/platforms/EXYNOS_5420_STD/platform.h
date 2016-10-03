@@ -27,9 +27,6 @@
 #define MC_PM_RUNTIME
 #endif
 
-/* Enabel BL switcher notifier */
-#define MC_BL_NOTIFIER
-
 /* Enable Fastcall worker thread */
 #define MC_FASTCALL_WORKER_THREAD
 

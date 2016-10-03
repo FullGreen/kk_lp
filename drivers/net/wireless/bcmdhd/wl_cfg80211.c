@@ -1526,7 +1526,16 @@ wl_cfg80211_del_virtual_iface(struct wiphy *wiphy, bcm_struct_cfgdev *cfgdev)
 #endif /* CUSTOM_SET_CPUCORE */
 #if defined(WL_CFG80211_P2P_DEV_IF)
 	if (cfgdev->iftype == NL80211_IFTYPE_P2P_DEVICE) {
+#ifdef CUSTOMER_HW4
+		if (dhd_download_fw_on_driverload) {
+			return wl_cfgp2p_del_p2p_disc_if(cfgdev, cfg);
+		} else {
+			cfg->down_disc_if = TRUE;
+			return 0;
+		}
+#else
 		return wl_cfgp2p_del_p2p_disc_if(cfgdev, cfg);
+#endif
 	}
 #endif /* WL_CFG80211_P2P_DEV_IF */
 	dev = cfgdev_to_wlc_ndev(cfgdev, cfg);
@@ -12506,3 +12515,25 @@ wl_cfg80211_get_fbt_key(uint8 *key)
 	memcpy(key, g_bcm_cfg->fbt_key, FBT_KEYLEN);
 }
 #endif /* WLFBT */
+
+
+#if defined(CUSTOMER_HW4) && defined(WL_CFG80211_P2P_DEV_IF)
+void wl_cfg80211_del_p2p_wdev(void)
+{
+	struct bcm_cfg80211 *cfg = g_bcm_cfg;
+	struct wireless_dev *wdev = NULL;
+
+	WL_DBG(("Enter \n"));
+	if (!cfg) {
+		WL_ERR(("Invalid Ptr\n"));
+		return;
+	} else {
+		wdev = cfg->p2p_wdev;
+	}
+
+	if (wdev && cfg->down_disc_if) {
+		wl_cfgp2p_del_p2p_disc_if(wdev, cfg);
+		cfg->down_disc_if = FALSE;
+	}
+}
+#endif /* CUSTOMER_HW4 && WL_CFG80211_P2P_DEV_IF */

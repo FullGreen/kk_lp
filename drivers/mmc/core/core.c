@@ -33,7 +33,6 @@
 #include <linux/mmc/mmc.h>
 #include <linux/mmc/sd.h>
 #include <linux/mmc/mmc_trace.h>
-#include <linux/stlog.h>
 
 #include "core.h"
 #include "bus.h"
@@ -43,6 +42,12 @@
 #include "mmc_ops.h"
 #include "sd_ops.h"
 #include "sdio_ops.h"
+
+#ifdef CONFIG_MMC_SUPPORT_STLOG
+#include <linux/stlog.h>
+#else
+#define ST_LOG(fmt,...)
+#endif
 
 #if defined(CONFIG_BLK_DEV_IO_TRACE)
 #include "../card/queue.h"
@@ -2212,7 +2217,7 @@ EXPORT_SYMBOL(mmc_detect_card_removed);
 
 void mmc_rescan(struct work_struct *work)
 {
-	static const unsigned freqs[] = { 400000, 300000, 200000, 100000 };
+	static const unsigned freqs[] = { 400000 };
 	struct mmc_host *host =
 		container_of(work, struct mmc_host, detect.work);
 	int i;
